@@ -15,7 +15,7 @@ upper_red1 = np.array([4, 255, 255])
 lower_red2 = np.array([170, 70, 50])
 upper_red2 = np.array([180, 255, 255])
 low_black = np.array([0, 0, 0])
-high_black = np.array([180, 255, 40])
+high_black = np.array([180, 200, 60])
 
 
 while True:
@@ -33,33 +33,39 @@ while True:
     # Draw rectangle on original frame
     cv2.rectangle(cap, (220, 140), (420, 340), (255, 255, 255), 1)
     frame = cap[140:340, 220:420]
+
     cv2.rectangle(cap, (0,240), (100,480), (255, 255, 255), 1)
     cv2.rectangle(cap, (540,240), (640,480), (255, 255, 255), 1)
-    left_frame = cap[0:100, 240:480]
+    left_frame = cap[240:480, 0:100]
     right_frame = cap[240:480, 540:640]
     # frame_gaussed = cv2.GaussianBlur(frame, (5, 5), 0)
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    hsv = cv2.cvtColor(left_frame, cv2.COLOR_BGR2HSV)
-    hsv = cv2.cvtColor(right_frame, cv2.COLOR_BGR2HSV)
+    hsv_l = cv2.cvtColor(left_frame, cv2.COLOR_BGR2HSV)
+    hsv_r = cv2.cvtColor(right_frame, cv2.COLOR_BGR2HSV)
 
     mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
     mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
     red_mask = cv2.bitwise_or(mask1, mask2)
-    black_mask = cv2.inRange(hsv, low_black, high_black)
+    black_left_mask = cv2.inRange(hsv_l, low_black, high_black)
+    black_right_mask = cv2.inRange(hsv_r, low_black, high_black)
 
-    black_contours, _ = cv2.findContours(black_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-    if black_contours:
-        cv2.drawContours(left_frame, black_contours, -1, (0, 255, 0), 2)
+    left_contours, _ = cv2.findContours(black_left_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    if left_contours:
+        cv2.drawContours(left_frame, left_contours, -1, (0, 0, 255), 2)
+
+    right_contours, _ = cv2.findContours(black_right_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    if right_contours:
+        cv2.drawContours(right_frame, right_contours, -1, (0, 255, 0), 2)
 
 
-    contours, _ = cv2.findContours(black_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    contours, _ = cv2.findContours(red_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     for i in contours:
         if cv2.contourArea(i) > 200:
             cv2.drawContours(frame, i, -1, (0, 0, 255), 2)
     if contours:
         largest = max(contours, key=cv2.contourArea)
         x, y, w, h = cv2.boundingRect(largest)
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
         # Show original frame only
     if draw:
         cv2.imshow("Video Frame", cap)
