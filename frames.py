@@ -14,7 +14,7 @@ class Frame:
         self.mask = 0
         self.hsv = 0
         self.frame_gaussed = 0
-        self.contours = 0
+        self.contours = None
 
         self.update(img)
 
@@ -31,6 +31,15 @@ class Frame:
             mask1 = cv2.inRange(self.hsv, self.low[1], self.low[1])
             self.mask = cv2.bitwise_or(self.mask, mask1)
         
-        contours, _ = cv2.findContours(self.mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-        if contours:
-            cv2.drawContours(self.frame, contours, -1, (0, 0, 255), 2)
+        self.contours, _ = cv2.findContours(self.mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if self.contours:
+            cv2.drawContours(self.frame, self.contours, -1, (0, 0, 255), 2)
+
+            return self.contours
+
+    def get_areas(self):
+        if self.contours is not None:
+            areas = [cv2.contourArea(cnt) for cnt in self.contours]
+            total_area = sum(areas)
+            return total_area
+        return 0
