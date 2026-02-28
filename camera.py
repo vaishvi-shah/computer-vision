@@ -8,7 +8,7 @@ import serial
 default_steering_value = 90
 KP = 0.01  # Proportional gain for steering adjustment
 # # Replace '/dev/ttyUSB0' with your serial port
-ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
 time.sleep(2)  # Wait for the connection to initialize
 
 
@@ -19,7 +19,7 @@ picam2.configure(picam2.create_preview_configuration(main={"format": 'XRGB8888',
 picam2.start()
 
 draw = True
-
+turning = False
 lower_red1 = np.array([0, 100, 100])
 upper_red1 = np.array([10, 255, 255])
 lower_red2 = np.array([180, 100, 100])
@@ -44,18 +44,12 @@ counter = 0
 fps = 0
 frame_count = 0
 start_time = time.time()
+steering_value = default_steering_value + 100
 
 while True:
     # Capture frame
     cap = picam2.capture_array("main")
-    # for i in contours:
-    #     if cv2.contourArea(i) > 200:
-    #         cv2.drawContours(frame, i, -1, (0, 0, 255), 2)
-    # if contours:
-    #     largest = max(contours, key=cv2.contourArea)
-    #     x, y, w, h = cv2.boundingRect(largest)
-    #     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
-    #     # Show original frame only
+
     middle_frame.update(cap)
     middle_frame.find_contours(is_red=True, colour=(255,0,0), colour2=(0,0,255))
 
@@ -67,18 +61,32 @@ while True:
     blue_contours, orange_contours = low_frame.find_contours(colour=(0,255,0), colour2=(255,0,0))
     left_area, _ = left_frame.get_areas(left_contours)
     right_area, _ = right_frame.get_areas(right_contours)
+    
+    # steering_value = default_steering_value + KP * (left_area - right_area)
+    # steering_value = max(30, min(150, steering_value)) + 100  # Clamp to [30, 150]
     low_area, colour = low_frame.get_areas(blue_contours, orange_contours)
     if low_area != 0:
         if low_area > 10000:
             blue_contours = None
             orange_contours = None
-            # print(low_area)
+
         elif low_area > 5000:
             if colour == 1:
                 low_frame.add_lines(colour)
             elif colour == 2:
                 low_frame.add_lines(colour)
 
+    if colour is not None:
+        turning = True
+        turning_time = time.time()
+
+    if turning:
+        if time.time() - turning_time > 2:
+            turning = False
+        else:
+            temp_value = low_frame.turn(direction)
+            if temp_value is not None:
+                steering_value = temp_value
 
     blue_count = low_frame.get_line_count(1)
     orange_count = low_frame.get_line_count(2)
@@ -86,11 +94,11 @@ while True:
     if direction == None:
         if blue_count == 0 and orange_count > 0:
             direction = "clockwise"
+            print(direction)
         elif orange_count == 0 and blue_count > 0:
             direction = "counterclockwise"
-        print(direction)
-    steering_value = default_steering_value + KP * (left_area - right_area)
-    steering_value = max(30, min(150, steering_value)) + 100  # Clamp to [30, 150]
+            print(direction)
+
     ser.write(f"{steering_value:.2f}\n".encode())
 
     cv2.putText(cap, f"Steering: {steering_value:.2f}", (200, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)

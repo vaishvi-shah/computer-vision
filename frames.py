@@ -21,6 +21,8 @@ class Frame:
         self.last_seen_timer = 2
         self.line_counter1 = 0
         self.line_counter2 = 0
+        self.last_turn_time = time.time()
+
     
 
         self.update(img)
@@ -77,3 +79,12 @@ class Frame:
             if contours2 != 0:
                 return contours2, colour
         return 0,0
+    
+    def turn(self, direction):
+        if direction == "clockwise":
+            if time.time() - self.last_turn_time < 2:             
+                return 230
+        elif direction == "counterclockwise":
+            if time.time() - self.last_turn_time < 2:
+                return 130
+        return None
