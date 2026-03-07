@@ -69,22 +69,21 @@ class Frame:
         if contours is not None:
             areas = [cv2.contourArea(cnt) for cnt in contours]
             contours1 = sum(areas)
-            colour = 1
-            if contours1 != 0:
-                return contours1, colour
         if contours2 is not None:
             areas2 = [cv2.contourArea(cnt) for cnt in contours2]
             contours2 = sum(areas2)
+        biggest_contour = max(contours1, contours2)
+        if biggest_contour == 0:
+            colour = None
+        elif biggest_contour == contours1:
+            colour = 1
+        elif biggest_contour == contours2:
             colour = 2
-            if contours2 != 0:
-                return contours2, colour
-        return 0,0
+        return biggest_contour,colour
     
-    def turn(self, direction):
-        if direction == "clockwise":
-            if time.time() - self.last_turn_time < 2:             
-                return 230
+    def get_turn_value(self, direction):
+        if direction == "clockwise":            
+                return 250
         elif direction == "counterclockwise":
-            if time.time() - self.last_turn_time < 2:
                 return 130
         return None

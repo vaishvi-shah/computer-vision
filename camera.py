@@ -5,12 +5,15 @@ from frames import Frame
 import time
 import serial
 
+# Green is left, red is right
+
 default_steering_value = 90
 KP = 0.01  # Proportional gain for steering adjustment
 # # Replace '/dev/ttyUSB0' with your serial port
 ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
 time.sleep(2)  # Wait for the connection to initialize
 
+turning_time = time.time()
 
 cv2.startWindowThread()
 
@@ -51,51 +54,78 @@ while True:
     cap = picam2.capture_array("main")
 
     middle_frame.update(cap)
-    middle_frame.find_contours(is_red=True, colour=(255,0,0), colour2=(0,0,255))
+    red_contours, green_contours = middle_frame.find_contours(is_red=True, colour=(255,0,0), colour2=(0,0,255))
+    middle_area, middle_colour = middle_frame.get_areas(red_contours, green_contours) # if middle_colour = 1 = red if middle_colour = 2 = green
+
+
 
     left_frame.update(cap)
     left_contours = left_frame.find_contours()
     right_frame.update(cap)
     right_contours = right_frame.find_contours()
     low_frame.update(cap)
-    blue_contours, orange_contours = low_frame.find_contours(colour=(0,255,0), colour2=(255,0,0))
     left_area, _ = left_frame.get_areas(left_contours)
     right_area, _ = right_frame.get_areas(right_contours)
-    
-    # steering_value = default_steering_value + KP * (left_area - right_area)
-    # steering_value = max(30, min(150, steering_value)) + 100  # Clamp to [30, 150]
-    low_area, colour = low_frame.get_areas(blue_contours, orange_contours)
+
+    blue_contours, orange_contours = low_frame.find_contours(colour=(0,255,0), colour2=(255,0,0))
+    low_area, bottom_colour = low_frame.get_areas(blue_contours, orange_contours) # if bottom_colour = 1 = blue if bottom_colour = 2 = orange
     if low_area != 0:
         if low_area > 10000:
             blue_contours = None
             orange_contours = None
 
         elif low_area > 5000:
-            if colour == 1:
-                low_frame.add_lines(colour)
-            elif colour == 2:
-                low_frame.add_lines(colour)
+            if bottom_colour == 1:
+                low_frame.add_lines(bottom_colour)
+            elif bottom_colour == 2:
+                low_frame.add_lines(bottom_colour)
 
-    if colour is not None:
+    if direction == "clockwise" and bottom_colour == 2 or direction == "counterclockwise" and bottom_colour == 1:
         turning = True
-        turning_time = time.time()
 
+
+
+    # getting the default steer value 
+    steering_value = default_steering_value + KP * (left_area - right_area)
+    steering_value = max(30, min(150, steering_value)) + 100  # Clamp to [30, 150]
+
+    # turning section
     if turning:
+
         if time.time() - turning_time > 2:
+            print("success")
+            turning_time = time.time()
             turning = False
         else:
-            temp_value = low_frame.turn(direction)
+            temp_value = low_frame.get_turn_value(direction)
             if temp_value is not None:
                 steering_value = temp_value
+
+
+    # turning after seeing the middle colours
+
+    if middle_area < 5000:
+        middle_colour = None
+
+    if middle_colour is not None:
+        print("old steering_value", steering_value)
+        if middle_colour == 1: # it is RED
+            temp_value = middle_frame.get_turn_value(direction="clockwise")
+        elif middle_colour == 2: # it is GREEN
+            temp_value = middle_frame.get_turn_value(direction="counterclockwise")
+        if temp_value is not None:
+            steering_value = temp_value
+            print("new steering_value", steering_value)
+
 
     blue_count = low_frame.get_line_count(1)
     orange_count = low_frame.get_line_count(2)
 
     if direction == None:
-        if blue_count == 0 and orange_count > 0:
+        if blue_count == 0 and orange_count > 0: # turn clockwise if orange
             direction = "clockwise"
             print(direction)
-        elif orange_count == 0 and blue_count > 0:
+        elif orange_count == 0 and blue_count > 0: # turn counterclockwise if blue
             direction = "counterclockwise"
             print(direction)
 
