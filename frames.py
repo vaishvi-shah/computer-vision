@@ -2,7 +2,7 @@ import cv2
 import time
 
 class Frame:
-    def __init__(self, img, x1,x2,y1,y2,low,high, second_low=None, second_high=None):
+    def __init__(self, img, x1, x2, y1, y2,low,high, second_low=None, second_high=None):
         self.img = img
         self.x1 = x1
         self.x2 = x2
@@ -21,14 +21,10 @@ class Frame:
         self.last_seen_timer = 2
         self.line_counter1 = 0
         self.line_counter2 = 0
-        self.last_turn_time = time.time()
-
-    
-
         self.update(img)
 
     def update(self, img):
-        cv2.rectangle(img, (self.x1,self.y1), (self.x2,self.y2), (255, 255, 255), 1)
+        cv2.rectangle(img, (self.x1, self.y1), (self.x2, self.y2), (255, 255, 255), 1)
         self.frame = img[self.y1:self.y2, self.x1:self.x2]
         self.frame_gaussed = cv2.GaussianBlur(self.frame, (1, 1), cv2.BORDER_DEFAULT)  # blurring the image
         self.hsv = cv2.cvtColor(self.frame_gaussed, cv2.COLOR_BGR2HSV)
@@ -38,7 +34,7 @@ class Frame:
         self.mask = cv2.inRange(self.hsv, self.low[0], self.high[0])
         contours2 = None        
         if is_red:
-            mask1 = cv2.inRange(self.hsv, self.low[1], self.low[1])
+            mask1 = cv2.inRange(self.hsv, self.low[1], self.high[1])
             self.mask = cv2.bitwise_or(self.mask, mask1)
         self.contours, _ = cv2.findContours(self.mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
         if self.contours:
@@ -58,6 +54,7 @@ class Frame:
             elif colour == 2:
                 self.line_counter2 += 1
             self.last_seen = time.time()
+            
     def get_line_count(self, number=1):
         if number == 1:
             return self.line_counter1
@@ -65,11 +62,11 @@ class Frame:
             return self.line_counter2
         return 0
 
-    def get_areas(self, contours = None, contours2 = None):
-        if contours is not None:
+    def get_areas(self, contours = 0, contours2 = 0):
+        if contours != 0:
             areas = [cv2.contourArea(cnt) for cnt in contours]
             contours1 = sum(areas)
-        if contours2 is not None:
+        if contours2 != 0:
             areas2 = [cv2.contourArea(cnt) for cnt in contours2]
             contours2 = sum(areas2)
         biggest_contour = max(contours1, contours2)
@@ -80,10 +77,4 @@ class Frame:
         elif biggest_contour == contours2:
             colour = 2
         return biggest_contour,colour
-    
-    def get_turn_value(self, direction):
-        if direction == "clockwise":            
-                return 250
-        elif direction == "counterclockwise":
-                return 130
-        return None
+

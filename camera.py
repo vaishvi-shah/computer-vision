@@ -23,15 +23,15 @@ picam2.start()
 
 draw = True
 turning = False
-lower_red1 = np.array([0, 100, 100])
+lower_red1 = np.array([0, 80, 40])
 upper_red1 = np.array([10, 255, 255])
-lower_red2 = np.array([180, 100, 100])
+lower_red2 = np.array([170, 80, 40])
 upper_red2 = np.array([180, 255, 255])
 low_black = np.array([0, 0, 0])
 high_black = np.array([180, 200, 60])
-low_green = np.array([40, 70, 50])
-high_green = np.array([80, 255, 255])
-low_blue = np.array([100, 150, 0])
+low_green = np.array([40, 70, 40])
+high_green = np.array([85, 255, 255])
+low_blue = np.array([100, 150, 40])
 high_blue = np.array([140, 255, 255])
 low_orange = np.array([10, 100, 100])
 high_orange = np.array([25, 255, 255])
@@ -63,10 +63,10 @@ while True:
     left_contours = left_frame.find_contours()
     right_frame.update(cap)
     right_contours = right_frame.find_contours()
-    low_frame.update(cap)
     left_area, _ = left_frame.get_areas(left_contours)
     right_area, _ = right_frame.get_areas(right_contours)
 
+    low_frame.update(cap)
     blue_contours, orange_contours = low_frame.find_contours(colour=(0,255,0), colour2=(255,0,0))
     low_area, bottom_colour = low_frame.get_areas(blue_contours, orange_contours) # if bottom_colour = 1 = blue if bottom_colour = 2 = orange
     if low_area != 0:
