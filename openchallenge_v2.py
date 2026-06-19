@@ -1,29 +1,4 @@
-'''
-1. make it run and stop when it sees black
-2. if i see orange on floor, i turn right, blue turn left
-'''
 
-# 1 ----------------------------------------------------------------------------------------
-
-'''
-#1 — Hybrid weighted control (gyro + camera as two separate steering inputs)
-Camera and gyro each compute their own steering value independently:
-cam_steer (wall imbalance → direct correction)
-gyro_steer (heading error → direct correction)
-Final steering is a blend:
-70% gyro + 30% camera
-Meaning:
-Camera directly fights steering every loop.
-Gyro also directly fights steering every loop.
-Behavior:
-More reactive to sensor noise.
-Two controllers “compete” and are averaged.
-
-Core idea:
-
-“Both sensors directly output steering, then we mix them.”
-
-'''
 
 # imports!
 import cv2
@@ -43,9 +18,10 @@ SHOW_VID = True                 # toggle live OpenCV preview window
 DEFAULT_STEER_ANGLE = 90        # neutral/straight steering angle, sent as 100 + this
 LINE_COUNT = 4                  # number of colour-line crossings before stopping
 
-KP = 0.01       # camera proportional gain (wall pixel area difference)
+KP = 0.01       # camera nudge gain (wall pixel area difference -> small heading correction)
 KD = 0.001      # (unused currently, reserved for derivative term)
 KP_GYRO = 1.0   # gyro proportional gain (heading error in degrees)
+TURN_ANGLE = 90 # heading change applied to the target when a turn marker is detected
 
 ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)  # serial link to the steering/speed microcontroller
 time.sleep(2)  # let the serial connection settle before writing
@@ -85,31 +61,23 @@ if heading is not None:
 else:
     print("Could not read heading.")
 time.sleep(0.1)
+target_heading = heading if heading is not None else 0  # persistent heading goal, starts pointing straight ahead
 
-# Blend weights: 70% gyro heading hold, 30% camera wall-pixel balance.
-GYRO_WEIGHT = 0.7
-CAM_WEIGHT = 0.3
-
-def heading_to_signed(heading):
+def navigate_wall(gyro_heading):
     """
-    Converts a raw gyro heading (0-359 deg, where left turns increase
-    normally and right turns wrap around through 360) into a signed
-    angle: 0 = straight, positive = left, negative = right.
-
-    Examples: 0->0, 20->20, 45->45, 180->180, 359->-1, 350->-10, 325->-35
+    Target-heading steering, persistent version:
+      - `target_heading` is a module-level value that the robot is trying
+        to point at. It is NOT recomputed from scratch every frame - it
+        only gets nudged (by the camera) or jumped (by a detected turn,
+        handled in the main loop). This lets the gyro genuinely hold a
+        heading instead of re-chasing a brand new target every iteration.
+      - The camera's only job is to apply a small persistent correction to
+        target_heading when it sees more wall on one side than the other.
+      - The gyro's only job is to drive heading_error (target vs current)
+        to zero via the proportional term below.
     """
-    if heading <= 180:
-        return heading
-    return heading - 360
+    global target_heading
 
-
-def navigate_wall(gyro_heading, desired_heading=0):
-    """
-    Blends two steering estimates into one value:
-      1. Gyro term: proportional correction on heading error (gyro_heading vs desired_heading).
-      2. Camera term: proportional correction on left/right wall pixel area difference (original logic).
-    Final steering = 70% gyro term + 30% camera term, clamped to servo range [30, 150].
-    """
     # Refresh the side frames with the latest camera capture and re-run the
     # colour mask + contour detection so we know how much "wall" each side sees.
     left_frame.update(cap)
@@ -121,20 +89,21 @@ def navigate_wall(gyro_heading, desired_heading=0):
     left_area, _ = left_frame.get_areas(left_contours)
     right_area, _ = right_frame.get_areas(right_contours)
 
-    # Camera term (unchanged from original): more black pixels on one side
-    # pushes steering away from that side, proportional to the area gap.
-    cam_steer = DEFAULT_STEER_ANGLE + KP * (left_area - right_area)
+    # Small persistent nudge to the target heading, NOT a full recompute.
+    # Positive = more wall on the left -> nudge target left.
+    target_heading = (target_heading + KP * (left_area - right_area)) % 360
 
-    # Gyro term: drives heading error toward zero. Falls back to straight if gyro unavailable.
-    if gyro_heading is not None:
-        signed_heading = heading_to_signed(gyro_heading)  # convert raw 0-359 reading to signed angle
-        heading_error = signed_heading - desired_heading  # positive = drifted left, negative = drifted right
-        gyro_steer = DEFAULT_STEER_ANGLE - KP_GYRO * heading_error
-    else:
-        gyro_steer = DEFAULT_STEER_ANGLE
+    if gyro_heading is None:
+        # No gyro available: nothing to correct against, hold straight.
+        return DEFAULT_STEER_ANGLE
 
-    # Weighted blend of the two independent steering estimates.
-    steering_value = GYRO_WEIGHT * gyro_steer + CAM_WEIGHT * cam_steer
+    # Shortest signed error between the (slowly-drifting) target and the
+    # current heading, wrap-safe at 0/360 (e.g. target=5, current=355 -> +10).
+    heading_error = ((target_heading - gyro_heading + 180) % 360) - 180
+
+    # P-controller on heading_error only. Positive error (target left of
+    # current) reduces steering value; negative error increases it.
+    steering_value = DEFAULT_STEER_ANGLE - KP_GYRO * heading_error
     steering_value = max(30, min(150, steering_value))  # clamp to servo range
 
     return int(steering_value)
@@ -160,8 +129,7 @@ print("ENTERING THE WHILE LOOP")
 while True:
     cap = picam2.capture_array("main")     # latest camera frame
     gyro = bno055.get_heading()            # latest raw heading (0-359 deg), or None if unavailable
-    desired_heading = 0                    # target heading: straight ahead
-    steering = 100 + navigate_wall(gyro, desired_heading)  # blended gyro+camera steering, offset for serial protocol
+    steering = 100 + navigate_wall(gyro)   # target-heading steering, offset for serial protocol
     speed = 0000
 
     # Only look for a new turn-colour line if we're outside the "just turned" cooldown window.
@@ -181,11 +149,13 @@ while True:
                 print(f"BLUE: {blue_count}")
                 if not direction:
                     direction = "CWR"  # lock turn direction on first colour seen
+                target_heading = (target_heading - TURN_ANGLE) % 360  # blue = turn right
             elif bottom_colour == 2:
                 orange_count += 1
                 print(f"ORANGE: {orange_count}")
                 if not direction:
                     direction = "CCWL"
+                target_heading = (target_heading + TURN_ANGLE) % 360  # orange = turn left
     else:
         # Debug: mark end of turn window
         if turning:
@@ -236,5 +206,3 @@ ser.close()
         
 
 cv2.destroyAllWindows()
-
-
