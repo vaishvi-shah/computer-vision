@@ -204,10 +204,11 @@ if __name__ == "__main__":
         print("Calibration failed. Could not initialize sensor.")
     else:
         # Guide user through calibration
-        perform_interactive_calibration()
+        # perform_interactive_calibration()
 
         # Save the results
-        save_calibration()
+        # save_calibration()
+        load_calibration()
 
         print("\n--- Testing with new calibration ---")
         try:

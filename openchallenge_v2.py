@@ -1,5 +1,4 @@
 
-
 # imports!
 import cv2
 import numpy as np
@@ -92,7 +91,6 @@ def navigate_wall(gyro_heading):
     # Small persistent nudge to the target heading, NOT a full recompute.
     # Positive = more wall on the left -> nudge target left.
     target_heading = (target_heading + KP * (left_area - right_area)) % 360
-
     if gyro_heading is None:
         # No gyro available: nothing to correct against, hold straight.
         return DEFAULT_STEER_ANGLE
@@ -100,6 +98,7 @@ def navigate_wall(gyro_heading):
     # Shortest signed error between the (slowly-drifting) target and the
     # current heading, wrap-safe at 0/360 (e.g. target=5, current=355 -> +10).
     heading_error = ((target_heading - gyro_heading + 180) % 360) - 180
+    print(f"heading error: {heading_error}")
 
     # P-controller on heading_error only. Positive error (target left of
     # current) reduces steering value; negative error increases it.
@@ -130,6 +129,7 @@ while True:
     cap = picam2.capture_array("main")     # latest camera frame
     gyro = bno055.get_heading()            # latest raw heading (0-359 deg), or None if unavailable
     steering = 100 + navigate_wall(gyro)   # target-heading steering, offset for serial protocol
+    print(f"heading: {gyro}, steer: {steering}")
     speed = 0000
 
     # Only look for a new turn-colour line if we're outside the "just turned" cooldown window.

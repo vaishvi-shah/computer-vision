@@ -41,11 +41,11 @@ bno055.load_calibration()      # apply saved accel/gyro/mag offsets if present
 
 SHOW_VID = True                 # toggle live OpenCV preview window
 DEFAULT_STEER_ANGLE = 90        # neutral/straight steering angle, sent as 100 + this
-LINE_COUNT = 4                  # number of colour-line crossings before stopping
+LINE_COUNT = 4000000                  # number of colour-line crossings before stopping
 
 KP = 0.01       # camera proportional gain (wall pixel area difference)
 KD = 0.001      # (unused currently, reserved for derivative term)
-KP_GYRO = 1.0   # gyro proportional gain (heading error in degrees)
+KP_GYRO = 0.5   # gyro proportional gain (heading error in degrees)
 
 ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)  # serial link to the steering/speed microcontroller
 time.sleep(2)  # let the serial connection settle before writing
@@ -75,6 +75,7 @@ high_orange = np.array([25, 255, 255])
 # Function to navigate straight along the wall based on the number of black pixels on either wall
 # if more black on a wall, turn steering the other way proportional to difference of black pixels
 
+desired_heading = 0
 
 # One-off startup check: confirm gyro is readable and report calibration state before the main loop.
 print("Reading gyro heading. Press Ctrl+C to exit.")
@@ -137,6 +138,8 @@ def navigate_wall(gyro_heading, desired_heading=0):
     steering_value = GYRO_WEIGHT * gyro_steer + CAM_WEIGHT * cam_steer
     steering_value = max(30, min(150, steering_value))  # clamp to servo range
 
+    print(f"gyro heading: {gyro_heading}, gyro steer: {gyro_steer}, cam steer: {cam_steer}, steer: {steering_value}")
+
     return int(steering_value)
 
 # execution of main program
@@ -159,8 +162,7 @@ print("ENTERING THE WHILE LOOP")
 
 while True:
     cap = picam2.capture_array("main")     # latest camera frame
-    gyro = bno055.get_heading()            # latest raw heading (0-359 deg), or None if unavailable
-    desired_heading = 0                    # target heading: straight ahead
+    gyro = bno055.get_heading()            # latest raw heading (0-359 deg), or None if unavailable                   # target heading: straight ahead
     steering = 100 + navigate_wall(gyro, desired_heading)  # blended gyro+camera steering, offset for serial protocol
     speed = 0000
 
@@ -178,14 +180,21 @@ while True:
             turning = True # This is only used for debug purposes to indicate end if turn
             if bottom_colour == 1:
                 blue_count += 1
+                desired_heading -= 90
                 print(f"BLUE: {blue_count}")
                 if not direction:
                     direction = "CWR"  # lock turn direction on first colour seen
             elif bottom_colour == 2:
                 orange_count += 1
+                desired_heading += 90
                 print(f"ORANGE: {orange_count}")
                 if not direction:
                     direction = "CCWL"
+
+
+        
+
+
     else:
         # Debug: mark end of turn window
         if turning:
@@ -229,7 +238,7 @@ while True:
     time.sleep(0.01)
     # print(f"sent value: heading: {steering} speed: {speed}")
     if cv2.waitKey(1) & 0xFF == ord('q'):  # manual quit key also sends the stop command
-        ser.write(f"1901022\n".encode())
+        ser.write(f"1901023\n".encode())
         ser.flush()
         break
 ser.close()
